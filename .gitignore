@@ -1,0 +1,27 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.wasm.o
+obj/
+obj_wasm/
+
+# Test outputs
+test/*.html
+test/*.js
+test/*.wasm
+test/*.data
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Raylib build (user should install separately)
+raylib/
