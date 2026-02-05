@@ -1,0 +1,178 @@
+# **************************************************************************** #
+#    MLX Raylib Project Template Makefile                                      #
+#                                                                              #
+#    This Makefile builds your MLX project for both native desktop and WASM.   #
+#    Copy this file to your project root and adjust the variables below.       #
+#                                                                              #
+#    Usage:                                                                    #
+#      make              → build native desktop binary                         #
+#      make wasm          → build for web browser (WASM)                       #
+#      make serve         → build WASM and start local web server              #
+#      make clean / fclean / re / re-wasm                                      #
+# **************************************************************************** #
+
+# ========================= PROJECT CONFIGURATION ========================== #
+
+# Your project name (output binary)
+NAME		= my_mlx_app
+
+# Your source files
+SRCS		= main.c
+
+# Directories containing header files (space-separated)
+INC_DIRS	= .
+
+# Additional libraries to link (e.g., libft)
+# Format: path/to/libft.a
+EXTRA_LIBS	=
+
+# Additional include dirs for extra libs
+EXTRA_INC	=
+
+# Assets to bundle into WASM build (directory path, or empty)
+# Everything in this directory will be accessible via the virtual filesystem
+WASM_ASSETS	=
+
+# Custom HTML shell for WASM (leave empty for default Emscripten shell)
+# You can copy and modify mlx_raylib/shell_default.html
+WASM_SHELL	=
+
+# Window title shown in HTML page
+WASM_TITLE	= MLX App
+
+# Default arguments passed to main() in WASM build (space-separated)
+WASM_ARGS	=
+
+# WASM memory (in bytes, must be multiple of 65536)
+WASM_MEMORY	= 134217728
+
+# Enable the JS<->C bridge? (yes/no)
+# If yes, you can use mlx_wasm_bridge.h functions
+WASM_BRIDGE	= no
+
+# Local server port for `make serve`
+SERVE_PORT	= 8080
+
+# ========================= PATH CONFIGURATION ============================= #
+
+# Path to mlx_raylib directory (adjust to your setup)
+MLX_DIR		= mlx_raylib
+
+# Raylib installation path (for native builds)
+RAYLIB_PATH	?= /usr/local
+
+# Raylib WASM build path (created by setup.sh)
+RAYLIB_WASM_PATH ?= $(HOME)/raylib-wasm
+
+# Emscripten SDK path
+EMSDK_PATH	?= $(HOME)/emsdk
+
+# ========================= COMPILER SETTINGS ============================== #
+
+CC			= cc
+CC_WASM		= emcc
+CFLAGS		= -Wall -Wextra -Werror -O2
+CFLAGS_WASM	= -Wall -Wextra -Os -DPLATFORM_WEB
+
+# ========================= AUTO-GENERATED (don't edit below) ============== #
+
+OBJS		= $(SRCS:.c=.o)
+OBJS_WASM	= $(addprefix wasm_obj/, $(SRCS:.c=.o))
+
+INC_FLAGS	= $(addprefix -I, $(INC_DIRS)) -I$(MLX_DIR) $(addprefix -I, $(EXTRA_INC))
+INC_WASM	= $(INC_FLAGS) -I$(RAYLIB_WASM_PATH)/src
+
+MLX_LIB		= $(MLX_DIR)/libmlx.a
+MLX_LIB_WASM	= $(MLX_DIR)/libmlx_wasm.a
+RAYLIB_WASM_LIB	= $(RAYLIB_WASM_PATH)/src/libraylib.web.a
+
+# Native link flags
+LDFLAGS		= -L$(RAYLIB_PATH)/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+LDFLAGS_MAC	= -L$(RAYLIB_PATH)/lib -lraylib -framework OpenGL -framework Cocoa \
+			  -framework IOKit -framework CoreVideo
+
+# WASM link flags
+WASM_FLAGS	= -sUSE_GLFW=3 -sASYNCIFY -sTOTAL_MEMORY=$(WASM_MEMORY) \
+			  -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=allocateUTF8
+
+WASM_OUT_DIR	= wasm_build
+WASM_OUT	= $(WASM_OUT_DIR)/index.html
+
+# Detect OS
+UNAME_S := $(shell uname -s)
+
+# ========================= TARGETS ======================================== #
+
+all: $(MLX_LIB) $(NAME)
+
+# --- Native build --- #
+
+$(NAME): $(OBJS) $(MLX_LIB) $(EXTRA_LIBS)
+	@echo "\033[34m→ Linking $(NAME)...\033[0m"
+ifeq ($(UNAME_S), Darwin)
+	$(CC) $(CFLAGS) $(OBJS) $(MLX_LIB) $(EXTRA_LIBS) $(LDFLAGS_MAC) -o $(NAME)
+else
+	$(CC) $(CFLAGS) $(OBJS) $(MLX_LIB) $(EXTRA_LIBS) $(LDFLAGS) -o $(NAME)
+endif
+	@echo "\033[32m✓ Built $(NAME)\033[0m"
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(INC_FLAGS) -I$(RAYLIB_PATH)/include -c $< -o $@
+
+$(MLX_LIB):
+	@$(MAKE) -C $(MLX_DIR) RAYLIB_PATH=$(RAYLIB_PATH)
+
+# --- WASM build --- #
+
+wasm: $(MLX_LIB_WASM) $(WASM_OUT)
+	@echo "\033[32m✓ WASM build ready in $(WASM_OUT_DIR)/\033[0m"
+	@echo "\033[33m  Run 'make serve' or start a local server in $(WASM_OUT_DIR)/\033[0m"
+
+$(WASM_OUT): $(SRCS) $(MLX_LIB_WASM) $(RAYLIB_WASM_LIB) $(EXTRA_LIBS)
+	@mkdir -p $(WASM_OUT_DIR)
+	@echo "\033[34m→ Compiling for WASM...\033[0m"
+	$(CC_WASM) $(CFLAGS_WASM) $(INC_WASM) \
+		$(SRCS) \
+		$(MLX_LIB_WASM) $(RAYLIB_WASM_LIB) $(EXTRA_LIBS) \
+		$(WASM_FLAGS) \
+		$(if $(WASM_ASSETS),--preload-file $(WASM_ASSETS),) \
+		$(if $(WASM_SHELL),--shell-file $(WASM_SHELL),) \
+		$(if $(WASM_BRIDGE),-sEXPORTED_FUNCTIONS=_main$(shell echo ',_mlx_bridge_restart,_mlx_bridge_clear_args,_mlx_bridge_add_arg,_mlx_bridge_send_command,_mlx_bridge_toggle_fullscreen,_mlx_bridge_toggle_pause'),) \
+		-o $(WASM_OUT)
+	@echo "\033[32m✓ WASM build complete\033[0m"
+
+$(MLX_LIB_WASM):
+ifeq ($(WASM_BRIDGE), yes)
+	@$(MAKE) -C $(MLX_DIR) wasm-bridge RAYLIB_WASM_PATH=$(RAYLIB_WASM_PATH)
+else
+	@$(MAKE) -C $(MLX_DIR) wasm RAYLIB_WASM_PATH=$(RAYLIB_WASM_PATH)
+endif
+
+$(RAYLIB_WASM_LIB):
+	@echo "\033[31m✗ Raylib WASM library not found at $(RAYLIB_WASM_LIB)\033[0m"
+	@echo "\033[33m  Run: cd $(MLX_DIR) && ./setup.sh\033[0m"
+	@exit 1
+
+# --- Serve --- #
+
+serve: wasm
+	@echo "\033[32m✓ Serving at http://localhost:$(SERVE_PORT)\033[0m"
+	@cd $(WASM_OUT_DIR) && python3 -m http.server $(SERVE_PORT)
+
+# --- Clean --- #
+
+clean:
+	rm -f $(OBJS)
+	rm -rf wasm_obj
+	@$(MAKE) -C $(MLX_DIR) clean 2>/dev/null || true
+
+fclean: clean
+	rm -f $(NAME)
+	rm -rf $(WASM_OUT_DIR)
+	@$(MAKE) -C $(MLX_DIR) fclean 2>/dev/null || true
+
+re: fclean all
+
+re-wasm: fclean wasm
+
+.PHONY: all clean fclean re wasm re-wasm serve

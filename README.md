@@ -1,265 +1,340 @@
-# MLX Raylib - Drop-in MinilibX Replacement
+# MLX Raylib — MinilibX for Desktop & Web
 
-A modern, cross-platform implementation of the MinilibX graphics library using [Raylib](https://www.raylib.com/) as the backend. This library provides a drop-in replacement for MinilibX that works on Linux, macOS, Windows, and **WebAssembly (browsers)**.
+A **drop-in replacement** for [MinilibX](https://github.com/42Paris/minilibx-linux) built on top of [Raylib](https://www.raylib.com/). Write your 42 project once, run it natively **and** in the browser via WebAssembly.
 
-## Features
+![Native + WASM](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WASM-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- ✅ **Cross-platform**: Works on Linux, macOS, Windows, and web browsers
-- ✅ **Drop-in replacement**: Compatible with existing MLX projects
-- ✅ **WebAssembly support**: Compile your MLX projects to run in browsers
-- ✅ **Modern graphics**: Uses Raylib's efficient OpenGL backend
-- ✅ **No X11 dependency**: Works without X11/XQuartz
+---
 
-## Supported Functions
+## ✨ Features
 
-| Function | Status | Notes |
-|----------|--------|-------|
-| `mlx_init` | ✅ | Initializes Raylib context |
-| `mlx_new_window` | ✅ | Creates a Raylib window |
-| `mlx_destroy_window` | ✅ | Closes window |
-| `mlx_new_image` | ✅ | Creates image buffer |
-| `mlx_get_data_addr` | ✅ | Returns image data pointer |
-| `mlx_put_image_to_window` | ✅ | Renders image to window |
-| `mlx_pixel_put` | ✅ | Direct pixel drawing |
-| `mlx_loop` | ✅ | Main event loop (WASM compatible) |
-| `mlx_loop_hook` | ✅ | Register loop callback |
-| `mlx_loop_end` | ✅ | Exit loop |
-| `mlx_key_hook` | ✅ | Key event handler |
-| `mlx_mouse_hook` | ✅ | Mouse button handler |
-| `mlx_hook` | ✅ | Generic event hooks |
-| `mlx_get_screen_size` | ✅ | Returns screen dimensions |
-| `mlx_mouse_get_pos` | ✅ | Get mouse position |
-| `mlx_mouse_move` | ✅ | Set mouse position (native only) |
-| `mlx_mouse_show` | ✅ | Show cursor |
-| `mlx_mouse_hide` | ✅ | Hide cursor |
-| `mlx_xpm_file_to_image` | ✅ | Load XPM images |
-| `mlx_destroy_image` | ✅ | Free image memory |
-| `mlx_destroy_display` | ✅ | Cleanup |
-| `mlx_string_put` | ⚠️ | Basic support |
+| | Native | WASM (Browser) |
+|---|---|---|
+| Window management | ✅ | ✅ |
+| Image rendering | ✅ | ✅ |
+| Keyboard input (X11 keycodes) | ✅ | ✅ |
+| Mouse input & motion | ✅ | ✅ |
+| XPM image loading | ✅ | ✅ |
+| Pixel put / string put | ✅ | ✅ |
+| JS ↔ C bridge (optional) | — | ✅ |
 
-## Quick Start
+**API-compatible** with MinilibX — existing `mlx_*` function calls work without changes.
 
-### Prerequisites
+---
 
-**For Native Build:**
-- GCC or Clang
-- Raylib 4.5+ (see installation below)
+## 🚀 Quick Start
 
-**For WASM/Browser Build:**
-- [Emscripten SDK](https://emscripten.org/)
-- Raylib compiled for WASM
+### 1. Clone & Setup
 
-### Installation
-
-1. Clone this repository:
 ```bash
 git clone https://github.com/zakaria-mourtaban/mlx_raylib.git
 cd mlx_raylib
+./setup.sh
 ```
 
-2. Install Raylib (if not already installed):
+The setup script will:
+- Install Raylib (native) if not present
+- Install Emscripten SDK if not present
+- Build Raylib for WASM
+- Build `libmlx.a` and `libmlx_wasm.a`
+
+> **Skip WASM?** Run `./setup.sh --native-only`
+> **Skip native?** Run `./setup.sh --wasm-only`
+
+### 2. Use in Your Project
+
+Copy `Makefile.template` to your project root:
+
 ```bash
-make install-deps
+cp mlx_raylib/Makefile.template myproject/Makefile
 ```
 
-3. Build the library:
+Edit the top section:
+
+```makefile
+NAME        = my_app
+SRCS        = main.c render.c utils.c
+MLX_DIR     = path/to/mlx_raylib
+```
+
+Build and run:
+
 ```bash
+make              # Native binary
+make wasm          # Build for browser
+make serve         # Build + start local server at http://localhost:8080
+```
+
+---
+
+## 📁 Project Structure
+
+```
+mlx_raylib/
+├── mlx.h                  # Public API header (include this)
+├── mlx_wasm_bridge.h      # Optional WASM ↔ JS bridge header
+├── mlx_int.h              # Internal structures
+├── mlx_*.c                # Implementation files
+├── Makefile               # Library build (libmlx.a / libmlx_wasm.a)
+├── Makefile.template       # Copy this to your project
+├── setup.sh               # One-command environment setup
+├── shell_default.html     # Default HTML template for WASM builds
+├── examples/
+│   ├── basic/             # Minimal example (gradient animation)
+│   └── bridge/            # JS ↔ C bridge demo
+└── README.md
+```
+
+---
+
+## 🔧 Building the Library
+
+If you prefer manual builds:
+
+```bash
+# Native
 make
+
+# WASM (requires emsdk in PATH)
+source ~/emsdk/emsdk_env.sh
+make wasm
+
+# WASM with JS bridge support
+make wasm-bridge
 ```
 
-### Using in Your Project
+---
 
-Simply copy `mlx.h`, `mlx_int.h`, and all `.c` files to your project, or use as a library:
+## 🌐 WASM Build Guide
 
-```bash
-# Copy to your project
-cp mlx*.h mlx*.c /path/to/your/project/
+### Prerequisites
 
-# Or use the compiled library
-gcc -o your_program your_code.c -L/path/to/mlx_raylib -lmlx -lraylib -lm
-```
+1. **Emscripten SDK** — installed by `setup.sh` or manually:
+   ```bash
+   git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+   cd ~/emsdk && ./emsdk install latest && ./emsdk activate latest
+   source ~/emsdk/emsdk_env.sh
+   ```
 
-## WebAssembly (Browser) Build
+2. **Raylib built for WASM** — installed by `setup.sh` or manually:
+   ```bash
+   git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git ~/raylib-wasm
+   cd ~/raylib-wasm/src
+   make PLATFORM=PLATFORM_WEB -j$(nproc)
+   mv libraylib.a libraylib.web.a
+   ```
 
-This library supports compiling MLX projects to run in web browsers using Emscripten.
+### Building Your Project for WASM
 
-### Setting up Emscripten
-
-```bash
-# Install Emscripten SDK
-git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
-cd ~/emsdk
-./emsdk install latest
-./emsdk activate latest
-source ./emsdk_env.sh
-```
-
-### Building Raylib for WASM
+Using the template Makefile:
 
 ```bash
-git clone https://github.com/raysan5/raylib.git ~/raylib-wasm
-cd ~/raylib-wasm/src
-make PLATFORM=PLATFORM_WEB -B
-```
-
-This creates `libraylib.web.a`.
-
-### Building MLX for WASM
-
-```bash
-cd /path/to/mlx_raylib
+source ~/emsdk/emsdk_env.sh
 make wasm
 ```
 
-This creates `libmlx_wasm.a`.
-
-### Compiling Your Project for Browser
+Or manually:
 
 ```bash
-emcc -Os your_main.c \
-    -I/path/to/mlx_raylib \
-    -I~/raylib-wasm/src \
-    /path/to/mlx_raylib/libmlx_wasm.a \
+emcc -Os -DPLATFORM_WEB \
+    your_sources.c \
+    -Imlx_raylib \
+    mlx_raylib/libmlx_wasm.a \
     ~/raylib-wasm/src/libraylib.web.a \
-    -s USE_GLFW=3 \
-    -s ASYNCIFY \
-    -s TOTAL_MEMORY=67108864 \
-    -s ALLOW_MEMORY_GROWTH=1 \
-    -o output.html
+    -sUSE_GLFW=3 -sASYNCIFY \
+    -sTOTAL_MEMORY=134217728 \
+    -sALLOW_MEMORY_GROWTH=1 \
+    --preload-file assets \
+    --shell-file mlx_raylib/shell_default.html \
+    -o wasm_build/index.html
 ```
 
-### WASM Build Flags Explained
+### Custom HTML Shell
 
-| Flag | Purpose |
-|------|---------|
-| `-s USE_GLFW=3` | Use Emscripten's GLFW implementation for window/input |
-| `-s ASYNCIFY` | Required for blocking operations like `mlx_loop` |
-| `-s TOTAL_MEMORY=67108864` | Initial memory (64MB, adjust as needed) |
-| `-s ALLOW_MEMORY_GROWTH=1` | Allow dynamic memory allocation |
-
-### Serving WASM Files
+Copy and modify `shell_default.html`:
 
 ```bash
-cd output_directory
-python3 -m http.server 8080
-# Open http://localhost:8080/output.html in browser
+cp mlx_raylib/shell_default.html my_shell.html
+# Edit my_shell.html to customize look and feel
 ```
 
-### File Loading in WASM
+In the `<script>` section, configure:
 
-For loading files (like `.rt` scene files), you need to preload them:
-
-```bash
-emcc ... --preload-file scenes/
+```javascript
+var MLX_CONFIG = {
+    args: ['path/to/scene.rt'],     // main() arguments
+    enableFilePicker: true,          // Show file upload button
+    fileExtensions: '.rt,.cub',     // Accepted file types
+};
 ```
 
-This embeds the `scenes/` directory into the WASM binary.
+### Bundling Asset Files
 
-## Architecture
+If your project reads files at runtime (e.g., `.rt` scene files):
 
-```
-┌─────────────────────────────────────────────────┐
-│              Your MLX Application                │
-├─────────────────────────────────────────────────┤
-│                  mlx.h API                       │
-├─────────────────────────────────────────────────┤
-│            MLX Raylib Backend                    │
-│  ┌─────────────────────────────────────────────┐│
-│  │ mlx_init.c   - Initialization               ││
-│  │ mlx_window.c - Window management            ││
-│  │ mlx_image.c  - Image buffers                ││
-│  │ mlx_loop.c   - Event loop (WASM compatible) ││
-│  │ mlx_hook.c   - Event callbacks              ││
-│  │ mlx_keys.c   - X11 keycode mapping          ││
-│  │ mlx_mouse.c  - Mouse handling               ││
-│  │ mlx_xpm.c    - XPM image loading            ││
-│  └─────────────────────────────────────────────┘│
-├─────────────────────────────────────────────────┤
-│                   Raylib                         │
-├─────────────────────────────────────────────────┤
-│    OpenGL (native) │ WebGL (WASM/browser)        │
-└─────────────────────────────────────────────────┘
+```makefile
+WASM_ASSETS = scenes    # Directory to bundle
 ```
 
-## Key Mapping
+Files will be accessible at their original paths in the WASM virtual filesystem.
 
-The library translates Raylib keycodes to X11 keycodes for compatibility with existing MLX projects:
+---
+
+## 🌉 WASM Bridge (Optional)
+
+The bridge lets JavaScript and your C code communicate at runtime — restart with different arguments, send commands, receive status updates.
+
+### Enable the Bridge
+
+1. Include the header in your C code:
+   ```c
+   #include "mlx_wasm_bridge.h"
+   ```
+
+2. Build with bridge support:
+   ```makefile
+   WASM_BRIDGE = yes   # In your Makefile
+   ```
+   Or: `make -C mlx_raylib wasm-bridge`
+
+### C Side — Checking for Commands
+
+Poll in your `loop_hook`:
 
 ```c
-// Example: ESC key
-#define XK_Escape 65307
-
-// In your code
-int key_handler(int keycode, void *param)
+int render(void *param)
 {
-    if (keycode == 65307) // ESC
-        mlx_loop_end(mlx);
-    return 0;
+    t_app *app = (t_app *)param;
+
+    // Check if JS requested a restart
+    if (mlx_bridge_restart_requested())
+    {
+        char **argv;
+        int argc = mlx_bridge_get_args(&argv);
+        // argv[1] might be a new scene file path
+        reload_scene(app, argv[1]);
+    }
+
+    // Check if JS sent a command
+    char *cmd = mlx_bridge_get_command();
+    if (cmd)
+    {
+        if (strcmp(cmd, "toggle_debug") == 0)
+            app->debug = !app->debug;
+    }
+
+    // Send status back to JS
+    mlx_bridge_send_status("Rendering frame 42");
+    mlx_bridge_send_event("progress", "50%");
+
+    // ... normal rendering ...
+    return (0);
 }
 ```
 
-See `mlx_keys.c` for the complete keycode mapping table.
+### JavaScript Side — Sending Commands
 
-## Performance Tips
+```javascript
+// Send a command string
+var ptr = Module.allocateUTF8("toggle_debug");
+Module._mlx_bridge_send_command(ptr);
+Module._free(ptr);
 
-1. **Use `mlx_put_image_to_window`**: Much faster than `mlx_pixel_put` for bulk drawing
-2. **Minimize window size**: Smaller windows = faster rendering
-3. **WASM memory**: Set `TOTAL_MEMORY` appropriately for your project
+// Restart with new arguments
+Module._mlx_bridge_clear_args();
+var name = Module.allocateUTF8("app");
+Module._mlx_bridge_add_arg(name);
+Module._free(name);
+var scene = Module.allocateUTF8("maps/new_scene.rt");
+Module._mlx_bridge_add_arg(scene);
+Module._free(scene);
+Module._mlx_bridge_restart();
 
-## WASM Limitations
-
-- `mlx_mouse_move()` - Cannot programmatically move cursor in browsers
-- File system access requires preloading files with `--preload-file`
-- Some key combinations may be intercepted by the browser
-
-## Differences from Original MinilibX
-
-1. **No X11 dependency**: Uses Raylib's cross-platform windowing
-2. **Endianness**: Image data is always in little-endian BGRA format
-3. **Loop behavior**: Uses `emscripten_set_main_loop` for WASM builds
-4. **Thread safety**: Not guaranteed, use single-threaded design
-
-## Testing
-
-```bash
-# Build and run test
-make test
-./test_mlx
-
-# Run WASM test
-cd test
-python3 -m http.server 8080
-# Open http://localhost:8080/wasm_test.html
+// Listen for C events
+Module.onStatusUpdate = function(msg) {
+    document.getElementById('status').textContent = msg;
+};
+Module.onBridgeEvent = function(type, data) {
+    console.log('Event:', type, data);
+};
 ```
 
-## Troubleshooting
+### Bridge API Reference
 
-### "raylib.h not found"
-- Set `RAYLIB_PATH` when building: `make RAYLIB_PATH=/path/to/raylib`
+| C Function | Direction | Description |
+|---|---|---|
+| `mlx_bridge_restart_requested()` | JS → C | Returns 1 if restart pending |
+| `mlx_bridge_get_args(&argv)` | JS → C | Get new argc/argv after restart |
+| `mlx_bridge_get_command()` | JS → C | Get pending command string |
+| `mlx_bridge_fullscreen_requested()` | JS → C | Check fullscreen toggle |
+| `mlx_bridge_pause_requested()` | JS → C | Check pause toggle |
+| `mlx_bridge_send_status(msg)` | C → JS | Send status to `Module.onStatusUpdate` |
+| `mlx_bridge_send_event(type, data)` | C → JS | Send event to `Module.onBridgeEvent` |
 
-### WASM not loading
-- Ensure you're serving via HTTP (not file://)
+| JS Function | Direction | Description |
+|---|---|---|
+| `Module._mlx_bridge_send_command(ptr)` | JS → C | Send command string |
+| `Module._mlx_bridge_clear_args()` | JS → C | Clear argument list |
+| `Module._mlx_bridge_add_arg(ptr)` | JS → C | Add argument string |
+| `Module._mlx_bridge_restart()` | JS → C | Trigger restart |
+| `Module._mlx_bridge_toggle_fullscreen()` | JS → C | Toggle fullscreen |
+| `Module._mlx_bridge_toggle_pause()` | JS → C | Toggle pause |
+
+---
+
+## ⌨️ Key Codes
+
+MLX Raylib outputs **X11 keycodes** (same as MinilibX on Linux), regardless of platform:
+
+| Key | Code | Key | Code |
+|---|---|---|---|
+| ESC | 65307 | Space | 32 |
+| W | 119 | A | 97 |
+| S | 115 | D | 100 |
+| ↑ | 65362 | ↓ | 65364 |
+| ← | 65361 | → | 65363 |
+| 1-9 | 49-57 | L_Shift | 65505 |
+
+> **Note for 42 projects:** If your code uses `#ifdef __linux__` for keycodes, add `|| defined(__EMSCRIPTEN__)` to use the Linux keycodes in WASM builds too.
+
+---
+
+## 🔀 Migrating from MinilibX
+
+1. Replace your `minilibx/` directory with `mlx_raylib/`
+2. Update include path: `-Imlx_raylib` instead of `-Iminilibx`
+3. Link: `mlx_raylib/libmlx.a` + `-lraylib -lGL -lm -lpthread -ldl -lrt -lX11`
+4. Remove `-lXext -lX11` (no longer needed, Raylib handles this)
+5. Build and test — everything should work identically
+
+For WASM, add the `wasm` target to your Makefile (see `Makefile.template`).
+
+---
+
+## 🐛 Troubleshooting
+
+### Black screen in WASM
+- Make sure you call `mlx_loop()` — it sets up Emscripten's main loop
 - Check browser console for errors
-- Verify all files (.html, .js, .wasm) are accessible
-
-### Black screen in browser
-- Add `-s ASYNCIFY` flag to emcc
-- Ensure `mlx_loop` is called
 
 ### Keyboard not working in WASM
-- Click the canvas first to focus it
-- Some keys may be blocked by browser shortcuts
+- Click on the canvas first (browser requires focus)
+- If using `#ifdef __linux__` for keycodes, add `|| defined(__EMSCRIPTEN__)`
 
-## License
+### Build errors with emcc
+- Run `source ~/emsdk/emsdk_env.sh` before building
+- Make sure `RAYLIB_WASM_PATH` points to a WASM-built raylib
 
-MIT License - see LICENSE file
+### Large WASM file size
+- Use `-Os` optimization flag
+- Only `--preload-file` the assets you need
+- The base binary is ~150KB WASM + ~180KB JS
 
-## Credits
+---
 
-- [Raylib](https://www.raylib.com/) - A simple and easy-to-use library to enjoy videogames programming
-- [MinilibX](https://github.com/42Paris/minilibx-linux) - Original X11 graphics library
-- [Emscripten](https://emscripten.org/) - LLVM to WebAssembly compiler
+## 📄 License
 
-## Contributing
+MIT License — see [LICENSE](LICENSE).
 
-Pull requests welcome! Please test on both native and WASM platforms.
+Built with [Raylib](https://www.raylib.com/) by [raysan5](https://github.com/raysan5).

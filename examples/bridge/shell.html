@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLX Bridge Demo</title>
+    <style>
+        :root { --accent: #e94560; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0f0f1a; color: #eee;
+            font-family: system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px;
+        }
+        h1 { color: var(--accent); margin-bottom: 6px; }
+        .subtitle { color: #888; margin-bottom: 16px; }
+        #canvas-container {
+            border: 2px solid var(--accent); border-radius: 8px; overflow: hidden;
+            box-shadow: 0 0 20px rgba(233,69,96,0.2);
+        }
+        canvas { display: block; }
+        .controls {
+            margin-top: 14px;
+            display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+        }
+        .controls button {
+            background: #1a1a2e; color: #eee;
+            border: 1px solid #2a2a4a;
+            padding: 8px 16px; border-radius: 6px;
+            cursor: pointer; font-size: 13px;
+            transition: all 0.2s;
+        }
+        .controls button:hover { background: var(--accent); border-color: var(--accent); }
+        .controls button.active { background: var(--accent); border-color: var(--accent); }
+        #status { margin-top: 10px; color: #888; font-size: 0.85em; }
+        #event-log {
+            margin-top: 14px; padding: 12px;
+            background: #111; border: 1px solid #222;
+            border-radius: 6px; width: 100%; max-width: 800px;
+            font-family: monospace; font-size: 12px;
+            max-height: 150px; overflow-y: auto;
+            color: #aaa;
+        }
+        .loading {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.92);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .loading.hidden { display: none; }
+        .spinner {
+            width: 44px; height: 44px;
+            border: 3px solid #222; border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 16px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p class="loading-text">Loading Bridge Demo...</p>
+</div>
+
+<h1>🌉 Bridge Demo</h1>
+<p class="subtitle">WASM ↔ JavaScript Communication</p>
+
+<div id="canvas-container">
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+</div>
+
+<div class="controls">
+    <button onclick="sendCommand('mode0')" id="btn-mode0" class="active">🌈 Gradient</button>
+    <button onclick="sendCommand('mode1')" id="btn-mode1">💜 Purple</button>
+    <button onclick="sendCommand('mode2')" id="btn-mode2">✨ XOR</button>
+    <button onclick="sendCommand('reset')">⟲ Reset</button>
+    <button onclick="restartWithArg('scene_a')">Load Scene A</button>
+    <button onclick="restartWithArg('scene_b')">Load Scene B</button>
+    <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+</div>
+
+<p id="status">Initializing...</p>
+<div id="event-log"></div>
+
+<script>
+    function logEvent(msg) {
+        var el = document.getElementById('event-log');
+        var line = document.createElement('div');
+        line.textContent = new Date().toLocaleTimeString() + ' │ ' + msg;
+        el.appendChild(line);
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function sendCommand(cmd) {
+        if (!Module._mlx_bridge_send_command) {
+            logEvent('Bridge not available');
+            return;
+        }
+        var ptr = Module.allocateUTF8(cmd);
+        Module._mlx_bridge_send_command(ptr);
+        Module._free(ptr);
+        logEvent('→ Command: ' + cmd);
+
+        // Update button states
+        ['mode0','mode1','mode2'].forEach(function(m) {
+            document.getElementById('btn-' + m).classList.toggle('active', m === cmd);
+        });
+    }
+
+    function restartWithArg(arg) {
+        if (!Module._mlx_bridge_restart) {
+            logEvent('Bridge not available');
+            return;
+        }
+        Module._mlx_bridge_clear_args();
+        var namePtr = Module.allocateUTF8('app');
+        Module._mlx_bridge_add_arg(namePtr);
+        Module._free(namePtr);
+        var argPtr = Module.allocateUTF8(arg);
+        Module._mlx_bridge_add_arg(argPtr);
+        Module._free(argPtr);
+        Module._mlx_bridge_restart();
+        logEvent('→ Restart with: ' + arg);
+    }
+
+    function toggleFullscreen() {
+        if (!document.fullscreenElement)
+            document.documentElement.requestFullscreen();
+        else
+            document.exitFullscreen();
+    }
+
+    var Module = {
+        arguments: [],
+        canvas: (function() {
+            var c = document.getElementById('canvas');
+            c.addEventListener('webglcontextlost', function(e) {
+                alert('WebGL context lost.');
+                e.preventDefault();
+            });
+            return c;
+        })(),
+        onRuntimeInitialized: function() {
+            document.getElementById('loading').classList.add('hidden');
+            logEvent('Runtime initialized');
+        },
+        onStatusUpdate: function(msg) {
+            document.getElementById('status').textContent = msg;
+            logEvent('← Status: ' + msg);
+        },
+        onBridgeEvent: function(type, data) {
+            logEvent('← Event [' + type + ']: ' + data);
+        },
+        print: function(t) { console.log(t); },
+        printErr: function(t) { console.error(t); },
+    };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

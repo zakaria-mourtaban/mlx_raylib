@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{{ TITLE }}}</title>
+    <style>
+        :root {
+            --bg: #0f0f1a;
+            --surface: #1a1a2e;
+            --accent: #e94560;
+            --accent-hover: #ff6b6b;
+            --text: #eee;
+            --text-muted: #888;
+            --border: #2a2a4a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 { color: var(--accent); margin-bottom: 6px; font-size: 1.5em; }
+        .subtitle { color: var(--text-muted); margin-bottom: 16px; font-size: 0.9em; }
+
+        /* Canvas */
+        #canvas-container {
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(233, 69, 96, 0.15);
+            position: relative;
+        }
+        canvas { display: block; }
+
+        /* Controls bar */
+        .controls {
+            margin-top: 14px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+        .controls button, .controls label {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .controls button:hover, .controls label:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .controls input[type="file"] { display: none; }
+
+        /* Status */
+        #status {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.85em;
+        }
+
+        /* Loading overlay */
+        .loading {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+        .loading.hidden { opacity: 0; pointer-events: none; }
+        .spinner {
+            width: 44px; height: 44px;
+            border: 3px solid #222;
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 16px; color: var(--text-muted); }
+        #progress-bar {
+            width: 200px; height: 4px;
+            background: #222;
+            border-radius: 2px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+        #progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p class="loading-text" id="loading-text">Loading...</p>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+</div>
+
+<!-- Main UI -->
+<h1 id="app-title">MLX App</h1>
+<p class="subtitle" id="app-subtitle">Powered by MLX Raylib</p>
+
+<div id="canvas-container">
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+</div>
+
+<div class="controls">
+    <button onclick="location.reload()" title="Restart application">⟲ Restart</button>
+    <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Toggle fullscreen">⛶ Fullscreen</button>
+    <!-- File picker (for apps that accept file arguments) -->
+    <label id="file-picker" title="Load a file" style="display:none;">
+        📂 Open File
+        <input type="file" id="file-input" onchange="handleFileUpload(event)">
+    </label>
+</div>
+
+<p id="status">Initializing...</p>
+
+<script>
+    // ================================================================
+    //  CONFIGURATION — Modify these for your project
+    // ================================================================
+    var MLX_CONFIG = {
+        // Arguments passed to main(). Set to [] for no args.
+        args: [],
+
+        // Set to true to show the file picker button
+        enableFilePicker: false,
+
+        // Accepted file extensions for the picker (e.g., '.rt,.cub')
+        fileExtensions: '',
+
+        // Virtual filesystem path where uploaded files are placed
+        uploadPath: '/uploads/',
+    };
+
+    // ================================================================
+    //  MODULE SETUP
+    // ================================================================
+    var Module = {
+        arguments: MLX_CONFIG.args,
+
+        canvas: (function() {
+            var c = document.getElementById('canvas');
+            c.addEventListener('webglcontextlost', function(e) {
+                alert('WebGL context lost. Please reload the page.');
+                e.preventDefault();
+            }, false);
+            return c;
+        })(),
+
+        onRuntimeInitialized: function() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('status').textContent = 'Running';
+        },
+
+        setStatus: function(text) {
+            var el = document.getElementById('loading-text');
+            if (el) el.textContent = text || 'Ready';
+            // Parse download progress
+            var m = text.match(/(\d+(?:\.\d+)?)\//);
+            if (m) {
+                var pct = Math.min(100, (parseFloat(m[1]) / 1) * 100);
+                var fill = document.getElementById('progress-fill');
+                if (fill) fill.style.width = pct + '%';
+            }
+        },
+
+        print: function(text) {
+            console.log(text);
+        },
+
+        printErr: function(text) {
+            console.error(text);
+            if (text.toLowerCase().includes('error')) {
+                document.getElementById('status').textContent = text;
+            }
+        },
+
+        // ── Bridge callbacks (optional) ──────────────────────────
+        // Override these in your custom shell to react to C events
+
+        // Called by mlx_bridge_send_status() from C
+        onStatusUpdate: function(msg) {
+            document.getElementById('status').textContent = msg;
+        },
+
+        // Called by mlx_bridge_send_event() from C
+        onBridgeEvent: function(type, data) {
+            console.log('[bridge event]', type, data);
+        },
+    };
+
+    // ================================================================
+    //  UI HELPERS
+    // ================================================================
+
+    // Show file picker if enabled
+    if (MLX_CONFIG.enableFilePicker) {
+        document.getElementById('file-picker').style.display = '';
+        if (MLX_CONFIG.fileExtensions) {
+            document.getElementById('file-input').accept = MLX_CONFIG.fileExtensions;
+        }
+    }
+
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+        // Also notify C side via bridge (if compiled with bridge)
+        if (Module._mlx_bridge_toggle_fullscreen) {
+            Module._mlx_bridge_toggle_fullscreen();
+        }
+    }
+
+    function handleFileUpload(event) {
+        var file = event.target.files[0];
+        if (!file) return;
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var data = new Uint8Array(e.target.result);
+            var path = MLX_CONFIG.uploadPath + file.name;
+
+            // Create directory if needed
+            try {
+                FS.mkdirTree(MLX_CONFIG.uploadPath);
+            } catch(err) {}
+
+            // Write file to virtual filesystem
+            FS.writeFile(path, data);
+            console.log('File written to:', path);
+
+            // If bridge is available, restart with new file as argument
+            if (Module._mlx_bridge_clear_args && Module._mlx_bridge_add_arg) {
+                Module._mlx_bridge_clear_args();
+                // First arg is program name
+                var namePtr = Module.allocateUTF8('app');
+                Module._mlx_bridge_add_arg(namePtr);
+                Module._free(namePtr);
+                // Second arg is the file path
+                var pathPtr = Module.allocateUTF8(path);
+                Module._mlx_bridge_add_arg(pathPtr);
+                Module._free(pathPtr);
+                Module._mlx_bridge_restart();
+                document.getElementById('status').textContent = 'Loaded: ' + file.name;
+            } else {
+                document.getElementById('status').textContent =
+                    'File uploaded to ' + path + ' (restart manually or enable bridge)';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
