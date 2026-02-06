@@ -106,7 +106,7 @@ make wasm-bridge
 
 ---
 
-## 🌐 WASM Build Guide
+## �� WASM Build Guide
 
 ### Prerequisites
 
@@ -125,59 +125,131 @@ make wasm-bridge
    mv libraylib.a libraylib.web.a
    ```
 
-### Building Your Project for WASM
+---
 
-Using the template Makefile:
+## ⚠️ Compiling Your Own Libraries for WASM
 
-```bash
-source ~/emsdk/emsdk_env.sh
-make wasm
+**This is the most common issue when building 42 projects for WASM.**
+
+If your project uses `libft.a`, `libftprintf.a`, or any other static libraries, you **MUST** recompile them with `emcc` (the Emscripten compiler). Native `.o` files compiled with `gcc` or `clang` are **not** compatible with WASM.
+
+### The Problem
+
+```
+wasm-ld: warning: ./libft/libft.a: archive member 'ft_strlen.o' is neither Wasm object file nor LLVM bitcode
+wasm-ld: error: undefined symbol: ft_strlen
 ```
 
-Or manually:
+This means `libft.a` was compiled with `gcc`, producing x86 object files. WASM needs WebAssembly object files.
 
-```bash
-emcc -Os -DPLATFORM_WEB \
-    your_sources.c \
-    -Imlx_raylib \
-    mlx_raylib/libmlx_wasm.a \
-    ~/raylib-wasm/src/libraylib.web.a \
-    -sUSE_GLFW=3 -sASYNCIFY \
-    -sTOTAL_MEMORY=134217728 \
-    -sALLOW_MEMORY_GROWTH=1 \
-    --preload-file assets \
-    --shell-file mlx_raylib/shell_default.html \
-    -o wasm_build/index.html
+### The Solution
+
+Add a `wasm` target to each library's Makefile:
+
+**libft/Makefile:**
+```makefile
+NAME = libft.a
+WASM_NAME = libft_wasm.a
+
+CC = gcc
+CFLAGS = -Wall -Wextra -Werror
+
+SRCS = ft_strlen.c ft_strcpy.c ft_atoi.c ...
+OBJS = $(SRCS:.c=.o)
+WASM_OBJS = $(SRCS:.c=.wasm.o)
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+ar rcs $(NAME) $(OBJS)
+
+# WASM target - compile with emcc, archive with emar
+wasm: $(WASM_NAME)
+
+$(WASM_NAME): $(WASM_OBJS)
+emar rcs $(WASM_NAME) $(WASM_OBJS)
+
+%.o: %.c
+$(CC) $(CFLAGS) -c $< -o $@
+
+%.wasm.o: %.c
+emcc -Wall -Wextra -O3 -c $< -o $@
+
+clean:
+rm -f $(OBJS) $(WASM_OBJS)
+
+fclean: clean
+rm -f $(NAME) $(WASM_NAME)
 ```
 
-### Custom HTML Shell
+**Key differences for WASM:**
+- Use `emcc` instead of `gcc` for compilation
+- Use `emar` instead of `ar` for archiving
+- Name the output `libft_wasm.a` to distinguish from native
 
-Copy and modify `shell_default.html`:
-
-```bash
-cp mlx_raylib/shell_default.html my_shell.html
-# Edit my_shell.html to customize look and feel
-```
-
-In the `<script>` section, configure:
-
-```javascript
-var MLX_CONFIG = {
-    args: ['path/to/scene.rt'],     // main() arguments
-    enableFilePicker: true,          // Show file upload button
-    fileExtensions: '.rt,.cub',     // Accepted file types
-};
-```
-
-### Bundling Asset Files
-
-If your project reads files at runtime (e.g., `.rt` scene files):
+### Project Makefile Example
 
 ```makefile
-WASM_ASSETS = scenes    # Directory to bundle
+NAME = miniRT
+SRCS = main.c render.c parse.c ...
+
+# Library directories
+LIBFT_DIR = ./libft
+PRINTF_DIR = ./ft_printf
+MLX_DIR = ./mlx_raylib
+
+# Native build
+all: $(NAME)
+
+$(NAME): $(SRCS)
+make -C $(LIBFT_DIR)
+make -C $(PRINTF_DIR)
+make -C $(MLX_DIR)
+gcc -o $(NAME) $(SRCS) \
+-L$(LIBFT_DIR) -L$(PRINTF_DIR) -L$(MLX_DIR) \
+-lft -lftprintf -lmlx \
+-lraylib -lGL -lm -lpthread -ldl -lrt
+
+# WASM build - build WASM versions of ALL libraries first
+RAYLIB_WASM = ~/raylib-wasm/src/libraylib.web.a
+
+wasm:
+make -C $(LIBFT_DIR) wasm        # Build libft_wasm.a
+make -C $(PRINTF_DIR) wasm       # Build libftprintf_wasm.a
+make -C $(MLX_DIR) wasm          # Build libmlx_wasm.a
+emcc -O3 -o $(NAME).html $(SRCS) \
+-I$(MLX_DIR) \
+-L$(LIBFT_DIR) -L$(PRINTF_DIR) -L$(MLX_DIR) \
+-lft_wasm -lftprintf_wasm -lmlx_wasm \
+$(RAYLIB_WASM) \
+-sUSE_GLFW=3 -sASYNCIFY -sTOTAL_MEMORY=67108864 \
+--shell-file $(MLX_DIR)/shell_default.html
+
+clean:
+make -C $(LIBFT_DIR) clean
+make -C $(PRINTF_DIR) clean
+make -C $(MLX_DIR) clean
+rm -f $(NAME) $(NAME).html $(NAME).js $(NAME).wasm
 ```
 
-Files will be accessible at their original paths in the WASM virtual filesystem.
+### Quick Reference
+
+| Tool | Native | WASM |
+|------|--------|------|
+| Compiler | `gcc` / `clang` | `emcc` |
+| Archiver | `ar` | `emar` |
+| Linker | `ld` / `gcc` | `emcc` |
+| Output | `.o` (ELF/Mach-O) | `.wasm.o` (WASM) |
+
+### Checklist for WASM Builds
+
+- [ ] Source emsdk: `source ~/emsdk/emsdk_env.sh`
+- [ ] Add `wasm` target to `libft/Makefile`
+- [ ] Add `wasm` target to `ft_printf/Makefile` (if using)
+- [ ] Add `wasm` target to any other library Makefiles
+- [ ] In main Makefile, call `make wasm` for each library before linking
+- [ ] Link with `-l<name>_wasm` instead of `-l<name>`
+- [ ] Include the raylib WASM library in the link
 
 ---
 
@@ -212,7 +284,6 @@ int render(void *param)
     {
         char **argv;
         int argc = mlx_bridge_get_args(&argv);
-        // argv[1] might be a new scene file path
         reload_scene(app, argv[1]);
     }
 
@@ -226,60 +297,25 @@ int render(void *param)
 
     // Send status back to JS
     mlx_bridge_send_status("Rendering frame 42");
-    mlx_bridge_send_event("progress", "50%");
 
-    // ... normal rendering ...
     return (0);
 }
 ```
 
-### JavaScript Side — Sending Commands
+### JavaScript Side
 
 ```javascript
-// Send a command string
+// Send a command
 var ptr = Module.allocateUTF8("toggle_debug");
 Module._mlx_bridge_send_command(ptr);
 Module._free(ptr);
 
 // Restart with new arguments
 Module._mlx_bridge_clear_args();
-var name = Module.allocateUTF8("app");
-Module._mlx_bridge_add_arg(name);
-Module._free(name);
-var scene = Module.allocateUTF8("maps/new_scene.rt");
-Module._mlx_bridge_add_arg(scene);
-Module._free(scene);
+Module._mlx_bridge_add_arg(Module.allocateUTF8("app"));
+Module._mlx_bridge_add_arg(Module.allocateUTF8("scenes/new.rt"));
 Module._mlx_bridge_restart();
-
-// Listen for C events
-Module.onStatusUpdate = function(msg) {
-    document.getElementById('status').textContent = msg;
-};
-Module.onBridgeEvent = function(type, data) {
-    console.log('Event:', type, data);
-};
 ```
-
-### Bridge API Reference
-
-| C Function | Direction | Description |
-|---|---|---|
-| `mlx_bridge_restart_requested()` | JS → C | Returns 1 if restart pending |
-| `mlx_bridge_get_args(&argv)` | JS → C | Get new argc/argv after restart |
-| `mlx_bridge_get_command()` | JS → C | Get pending command string |
-| `mlx_bridge_fullscreen_requested()` | JS → C | Check fullscreen toggle |
-| `mlx_bridge_pause_requested()` | JS → C | Check pause toggle |
-| `mlx_bridge_send_status(msg)` | C → JS | Send status to `Module.onStatusUpdate` |
-| `mlx_bridge_send_event(type, data)` | C → JS | Send event to `Module.onBridgeEvent` |
-
-| JS Function | Direction | Description |
-|---|---|---|
-| `Module._mlx_bridge_send_command(ptr)` | JS → C | Send command string |
-| `Module._mlx_bridge_clear_args()` | JS → C | Clear argument list |
-| `Module._mlx_bridge_add_arg(ptr)` | JS → C | Add argument string |
-| `Module._mlx_bridge_restart()` | JS → C | Trigger restart |
-| `Module._mlx_bridge_toggle_fullscreen()` | JS → C | Toggle fullscreen |
-| `Module._mlx_bridge_toggle_pause()` | JS → C | Toggle pause |
 
 ---
 
@@ -294,7 +330,6 @@ MLX Raylib outputs **X11 keycodes** (same as MinilibX on Linux), regardless of p
 | S | 115 | D | 100 |
 | ↑ | 65362 | ↓ | 65364 |
 | ← | 65361 | → | 65363 |
-| 1-9 | 49-57 | L_Shift | 65505 |
 
 > **Note for 42 projects:** If your code uses `#ifdef __linux__` for keycodes, add `|| defined(__EMSCRIPTEN__)` to use the Linux keycodes in WASM builds too.
 
@@ -304,15 +339,18 @@ MLX Raylib outputs **X11 keycodes** (same as MinilibX on Linux), regardless of p
 
 1. Replace your `minilibx/` directory with `mlx_raylib/`
 2. Update include path: `-Imlx_raylib` instead of `-Iminilibx`
-3. Link: `mlx_raylib/libmlx.a` + `-lraylib -lGL -lm -lpthread -ldl -lrt -lX11`
-4. Remove `-lXext -lX11` (no longer needed, Raylib handles this)
+3. Link: `mlx_raylib/libmlx.a` + `-lraylib -lGL -lm -lpthread -ldl -lrt`
+4. Remove `-lXext -lX11` (no longer needed)
 5. Build and test — everything should work identically
 
-For WASM, add the `wasm` target to your Makefile (see `Makefile.template`).
+For WASM, add a `wasm` target to your Makefile (see above).
 
 ---
 
 ## 🐛 Troubleshooting
+
+### "archive member is neither Wasm object file nor LLVM bitcode"
+Your library was compiled with gcc/clang. Recompile it with `emcc` (see above).
 
 ### Black screen in WASM
 - Make sure you call `mlx_loop()` — it sets up Emscripten's main loop
@@ -324,7 +362,7 @@ For WASM, add the `wasm` target to your Makefile (see `Makefile.template`).
 
 ### Build errors with emcc
 - Run `source ~/emsdk/emsdk_env.sh` before building
-- Make sure `RAYLIB_WASM_PATH` points to a WASM-built raylib
+- Make sure Raylib WASM library path is correct
 
 ### Large WASM file size
 - Use `-Os` optimization flag
